@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unicorn Candy Quest</title>
+    <style>
+        body {
+            background-image: url('https://png.pngtree.com/png-clipart/20220910/original/pngtree-cute-unicorn-cartoon-vector-with-candy-png-image_8526031.png');
+            background-size: 200px;
+            background-repeat: repeat;
+            background-color: #e6ccff;
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Comic Sans MS', cursive;
+        }
+        .board { display: flex; flex-direction: column; align-items: center; background-color: rgba(147, 112, 219, 0.7); padding: 20px; border-radius: 15px; margin: 20px auto; box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); }
+        .row { display: flex; justify-content: center; }
+        .cell { 
+            width: 60px; 
+            height: 60px; 
+            background-color: white; 
+            border-radius: 50%; 
+            margin: 5px; 
+            cursor: pointer; 
+            position: relative; 
+            overflow: hidden; 
+            transition: transform 0.3s ease; 
+            background-size: contain; 
+            background-position: center; 
+            background-repeat: no-repeat; 
+        }
+        .cell:hover { transform: scale(1.1); }
+        .cell.red { background-color: red; animation: drop 0.5s ease-out; }
+        .cell.yellow { background-color: yellow; animation: drop 0.5s ease-out; }
+        .cell.captured1 { 
+            background-image: url('https://th.bing.com/th/id/OIP.u6D5Ct-LZ30rZ5uaadv4xwHaEo?w=282&h=180&c=7&r=0&o=5&pid=1.7'); 
+            background-color: #ffccff; /* Light pink fallback */
+            animation: drop 0.5s ease-out; 
+        }
+        .cell.captured2 { 
+            background-image: url('https://cdn.pixabay.com/photo/2012/06/27/15/02/candy-50838_1280.jpg'); 
+            background-color: #ccffcc; /* Light green fallback */
+            animation: drop 0.5s ease-out; 
+        }
+        @keyframes drop { 0% { transform: translateY(-1000%); } 100% { transform: translateY(0); } }
+        .controls { text-align: center; margin: 20px; background-color: rgba(255, 192, 203, 0.7); padding: 15px; border-radius: 10px; }
+        button { padding: 10px 20px; font-size: 18px; margin: 0 10px; background-color: #ff69b4; border: none; border-radius: 5px; cursor: pointer; color: white; box-shadow: 0 0 5px rgba(0, 0, 0, 0.3); }
+        button:hover { background-color: #ff1493; }
+        #status { text-align: center; font-size: 24px; margin: 20px; background-color: rgba(255, 255, 255, 0.7); padding: 10px; border-radius: 10px; color: #ff00ff; }
+        audio { position: fixed; bottom: 10px; right: 10px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="startGame()">Start Game</button>
+        <button onclick="resetGame()">Reset</button>
+    </div>
+    <div id="status">Click Start to begin!</div>
+    <div class="board" id="board"></div>
+    <audio id="backgroundMusic" autoplay loop>
+        <source src="https://www.bensound.com/bensound-music/bensound-ukulele.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        const ROWS = 5;
+        const COLS = 5;
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(''));
+        let currentPlayer = 1; // 1 for Red (Player), 2 for Yellow (AI)
+        let gameActive = false;
+        let playerScore = 0;
+        let aiScore = 0;
+        const status = document.getElementById('status');
+        const audio = document.getElementById('backgroundMusic');
+
+        // Ensure audio plays on page load or first interaction
+        function playAudio() {
+            audio.play().catch(error => {
+                console.log("Autoplay blocked by browser. Will play on first interaction:", error);
+                document.addEventListener('click', () => {
+                    audio.play();
+                }, { once: true }); // Play on first click if autoplay fails
+            });
+        }
+
+        // Call playAudio when the page loads
+        window.onload = playAudio;
+
+        function createBoard() {
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+            for (let row = 0; row < ROWS; row++) {
+                const rowElement = document.createElement('div');
+                rowElement.classList.add('row');
+                rowElement.style.marginLeft = `${(ROWS - row - 1) * 30}px`;
+                for (let col = 0; col < COLS; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.onclick = () => makeMove(col);
+                    rowElement.appendChild(cell);
+                }
+                boardElement.appendChild(rowElement);
+            }
+        }
+
+        function startGame() {
+            resetGame();
+            gameActive = true;
+            status.textContent = "Player 1's turn (Red) | Score: 0 - 0";
+        }
+
+        function resetGame() {
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(''));
+            currentPlayer = 1;
+            gameActive = true;
+            playerScore = 0;
+            aiScore = 0;
+            createBoard();
+            status.textContent = "Player 1's turn (Red) | Score: 0 - 0";
+            audio.play(); // Ensure music restarts on reset
+        }
+
+        function makeMove(col) {
+            if (!gameActive) return;
+
+            const row = getLowestEmptyRow(col);
+            if (row === -1) return;
+
+            board[row][col] = currentPlayer;
+            updateCell(row, col);
+            const captures = checkCaptures(row, col, currentPlayer);
+            if (captures > 0) {
+                if (currentPlayer === 1) playerScore += captures;
+                else aiScore += captures;
+            }
+
+            if (board.every(row => row.every(cell => cell !== ''))) {
+                gameActive = false;
+                status.textContent = `Game Over! Final Score: ${playerScore} - ${aiScore} | ${playerScore > aiScore ? 'Player Wins!' : aiScore > playerScore ? 'AI Wins!' : 'Tie!'}`;
+                return;
+            }
+
+            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            status.textContent = `Player ${currentPlayer}'s turn (${currentPlayer === 1 ? 'Red' : 'Yellow'}) | Score: ${playerScore} - ${aiScore}`;
+
+            if (currentPlayer === 2) {
+                setTimeout(aiMove, 500);
+            }
+        }
+
+        function getLowestEmptyRow(col) {
+            for (let row = 0; row < ROWS; row++) {
+                if (board[row][col] === '') return row;
+            }
+            return -1;
+        }
+
+        function updateCell(row, col) {
+            const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            cell.classList.remove('red', 'yellow', 'captured1', 'captured2'); // Clear all classes
+            if (board[row][col] === 1) cell.classList.add('red');
+            else if (board[row][col] === 2) cell.classList.add('yellow');
+            else if (board[row][col] === 'captured1') cell.classList.add('captured1');
+            else if (board[row][col] === 'captured2') cell.classList.add('captured2');
+        }
+
+        function checkCaptures(row, col, player) {
+            const opponent = player === 1 ? 2 : 1;
+            const directions = [
+                [0, 1], [0, -1], // Horizontal
+                [1, 0], [-1, 0], // Vertical
+                [1, 1], [-1, -1], // Diagonal /
+                [1, -1], [-1, 1]  // Diagonal \
+            ];
+            let captures = 0;
+
+            for (let [dr, dc] of directions) {
+                const newRow = row + dr;
+                const newCol = col + dc;
+                if (isValid(newRow, newCol) && board[newRow][newCol] === opponent) {
+                    const farRow = newRow + dr;
+                    const farCol = newCol + dc;
+                    if (isValid(farRow, farCol) && board[farRow][farCol] === player) {
+                        board[newRow][newCol] = player === 1 ? 'captured1' : 'captured2'; // Mark with capturer's ID
+                        updateCell(newRow, newCol); // Show appropriate candy image
+                        captures++;
+                        console.log(`Capture by Player ${player} at (${newRow}, ${newCol})`);
+                    }
+                }
+            }
+            return captures;
+        }
+
+        function isValid(row, col) {
+            return row >= 0 && row < ROWS && col >= 0 && col < COLS;
+        }
+
+        function aiMove() {
+            for (let col = 0; col < COLS; col++) {
+                const row = getLowestEmptyRow(col);
+                if (row !== -1) {
+                    board[row][col] = 2;
+                    if (checkPotentialCapture(row, col, 2)) {
+                        board[row][col] = '';
+                        makeMove(col);
+                        return;
+                    }
+                    board[row][col] = '';
+                }
+            }
+            for (let col = 0; col < COLS; col++) {
+                const row = getLowestEmptyRow(col);
+                if (row !== -1) {
+                    board[row][col] = 1;
+                    if (checkPotentialCapture(row, col, 1)) {
+                        board[row][col] = '';
+                        makeMove(col);
+                        return;
+                    }
+                    board[row][col] = '';
+                }
+            }
+            let validCols = [];
+            for (let col = 0; col < COLS; col++) {
+                if (getLowestEmptyRow(col) !== -1) validCols.push(col);
+            }
+            makeMove(validCols[Math.floor(Math.random() * validCols.length)]);
+        }
+
+        function checkPotentialCapture(row, col, player) {
+            const opponent = player === 1 ? 2 : 1;
+            const directions = [
+                [0, 1], [0, -1], [1, 0], [-1, 0],
+                [1, 1], [-1, -1], [1, -1], [-1, 1]
+            ];
+            for (let [dr, dc] of directions) {
+                const newRow = row + dr;
+                const newCol = col + dc;
+                if (isValid(newRow, newCol) && board[newRow][newCol] === opponent) {
+                    const farRow = newRow + dr;
+                    const farCol = newCol + dc;
+                    if (isValid(farRow, farCol) && board[farRow][farCol] === player) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Initialize board
+        createBoard();
+    </script>
+</body>
+</html>
